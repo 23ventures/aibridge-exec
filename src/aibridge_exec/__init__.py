@@ -11,4 +11,4 @@ This package must not import Flask, SQLAlchemy, Redis, Kafka, Celery or the
 platform (enforced by ``lint-imports``).
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
