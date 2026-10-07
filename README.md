@@ -253,3 +253,9 @@ src/aibridge_exec/code_runtime/ local Python execution runtime
 
 To be decided before the repository is made public (see the licensing checklist: add a
 `LICENSE` file with the copyright holder and set `license` in `pyproject.toml`).
+
+## Deploying to AWS
+
+`.github/workflows/deploy.yml` tests, builds and deploys this repo to ECS Fargate on every push
+to `main`; the task definitions are in `deploy/ecs/`. The one-time AWS and GitHub setup is in
+the "AIBridge on AWS: setup and CI/CD" guide.

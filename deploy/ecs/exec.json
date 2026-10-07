@@ -1,0 +1,32 @@
+{
+  "family": "exec",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "runtimePlatform": { "cpuArchitecture": "X86_64", "operatingSystemFamily": "LINUX" },
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/aibridge-ecs-execution",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/aibridge-ecs-task",
+  "containerDefinitions": [
+    {
+      "name": "exec",
+      "image": "set-by-the-deploy-workflow",
+      "essential": true,
+      "portMappings": [{ "containerPort": 8000, "protocol": "tcp" }],
+      "command": ["aibridge-exec", "serve", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"],
+      "environment": [],
+      "secrets": [
+        { "name": "AIBRIDGE_EXEC_API_TOKENS", "valueFrom": "/aibridge/exec/API_TOKENS" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/aibridge/exec",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "exec",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

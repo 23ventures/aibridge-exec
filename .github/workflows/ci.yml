@@ -1,5 +1,10 @@
 name: ci
-on: [push, pull_request]
+# Pull requests and branch pushes run this directly; main runs it through deploy.yml.
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_call:
 jobs:
   test:
     runs-on: ubuntu-latest
