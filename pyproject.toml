@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aibridge-exec"
+version = "0.1.0"
+description = "Stateless execution layer for AIBridge: boundary contracts and the code runtime."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["packaging>=23"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5", "import-linter>=2.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["aibridge_exec"]

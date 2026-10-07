@@ -1,0 +1,18 @@
+[importlinter]
+root_package = aibridge_exec
+include_external_packages = True
+
+[importlinter:contract:stateless]
+name = Execution layer stays stateless and host-agnostic
+type = forbidden
+source_modules =
+    aibridge_exec
+forbidden_modules =
+    flask
+    werkzeug
+    sqlalchemy
+    flask_sqlalchemy
+    redis
+    kafka
+    celery
+    aibridge
