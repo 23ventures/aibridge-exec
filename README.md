@@ -1,4 +1,4 @@
-# aibridge-exec
+# aibridge-exec v1
 
 One Python interface to many LLM providers, with your own API key on every call. Use it as a
 library, or run it as a small stateless HTTP service that any language can call. It powers
