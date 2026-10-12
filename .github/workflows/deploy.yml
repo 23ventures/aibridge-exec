@@ -35,7 +35,20 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
       - uses: aws-actions/amazon-ecr-login@v2
       - uses: docker/setup-buildx-action@v3
+      - name: Check whether this commit's image already exists
+        id: image
+        run: |
+          # ECR tags are immutable: a re-run of the same commit reuses the image it already pushed.
+          TAG=$(aws ecr batch-get-image --repository-name aibridge-exec --image-ids imageTag=${{ github.sha }} \
+            --query 'images[0].imageId.imageTag' --output text)
+          if [ "$TAG" = "${{ github.sha }}" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Image ${{ github.sha }} is already in ECR: skipping the build."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build and push the image
+        if: steps.image.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
