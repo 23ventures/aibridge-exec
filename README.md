@@ -5,6 +5,7 @@ library, or run it as a small stateless HTTP service that any language can call.
 the AIBridge platform and the aibridge-playground app.
 
 - **Library:** `aibridge_exec.providers`: sync and async clients, streaming, model listing, typed errors
+- **Media:** `aibridge_exec.media`: image and video generation (OpenAI, Google, Stability, Alibaba, Luma)
 - **HTTP server** (optional extra): `aibridge-exec serve`, a FastAPI app with SSE streaming
 - **Also included:** boundary contracts shared with the AIBridge platform (`aibridge_exec.contracts`)
   and a local Python code runtime (`aibridge_exec.code_runtime`)
@@ -145,6 +146,39 @@ client = ChatClient(base_urls={"openai": "https://gateway.internal/openai/v1"})
 Adapters only describe HTTP requests and parse responses, so a new provider is one class:
 subclass `ProviderAdapter` (or reuse `OpenAICompatibleAdapter` with a new `ProviderInfo`) and call
 `register_provider(MyAdapter())`. See `aibridge_exec/providers/anthropic.py` for a complete example.
+
+## Image and video generation
+
+`aibridge_exec.media` generates images and videos with the caller's key. It is library-only (the
+HTTP server doesn't expose it yet).
+
+| Provider id | Image | Video |
+| --- | --- | --- |
+| `openai` | GPT Image, DALL·E (generate and edit) | Sora |
+| `gemini` | Gemini image models, Imagen (generate and edit) | Veo |
+| `stability` | Stable Image (sd3, ultra, core, inpaint) | image-to-video |
+| `alibaba` | Wan / Wanx | Wan |
+| `luma` | | Dream Machine |
+
+```python
+from aibridge_exec.media import ImageGenerationRequest, VideoGenerationRequest
+from aibridge_exec.media import get_image_provider, get_video_provider
+
+images = get_image_provider("openai")(api_key=KEY).generate(
+    ImageGenerationRequest(prompts=["a lighthouse at dusk"], model="gpt-image-1")
+)
+png = images.results[0].images[0].content
+
+veo = get_video_provider("gemini")(api_key=KEY)
+job = veo.start_generation(VideoGenerationRequest(model="veo-3.1-generate-preview", prompt="waves"))
+status = veo.check_status(job.provider_job_id)   # poll until "completed" or "failed"
+mp4 = veo.download_video(status.result_url)
+```
+
+Video is asynchronous: the caller schedules its own polling. Reference images for edits and
+image-to-video are http(s) or data: URIs. Result URLs never contain the API key; `download_video`
+adds it as a header. Sora image-to-video resizes the reference image, which needs Pillow:
+`pip install "aibridge-exec[media]"`.
 
 ## Run the HTTP server
 

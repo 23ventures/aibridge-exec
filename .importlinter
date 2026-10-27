@@ -22,6 +22,7 @@ name = Library modules do not depend on the HTTP server stack
 type = forbidden
 source_modules =
     aibridge_exec.providers
+    aibridge_exec.media
     aibridge_exec.contracts
     aibridge_exec.code_runtime
 forbidden_modules =
