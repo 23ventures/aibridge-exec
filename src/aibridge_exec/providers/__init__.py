@@ -1,7 +1,8 @@
 """Stateless chat adapters for LLM providers. Bring your own key on every call.
 
 Built in: ``openai``, ``anthropic``, ``gemini``, ``xai``, ``openrouter``, ``groq``, ``deepseek``,
-``mistral``, ``together`` and ``openai_compatible`` (any OpenAI-compatible URL).
+``mistral``, ``together``, ``kimi``, ``nvidia``, ``zai``, ``minimax``, ``arcee``, ``ai21``, ``cohere``,
+``alibaba``, ``meta``, ``ollama`` and ``openai_compatible`` (any OpenAI-compatible URL).
 
     from aibridge_exec.providers import ChatClient
 
@@ -19,7 +20,8 @@ from .base import HttpCall, ProviderAdapter, StreamParser
 from .client import AsyncChatClient, ChatClient
 from .errors import ProviderError
 from .registry import get_provider, list_providers, register_provider
-from .types import ChatMessage, ChatRequest, ChatResponse, ModelInfo, ProviderInfo, StreamEvent, Usage
+from .types import (ChatMessage, ChatRequest, ChatResponse, ModelInfo, ProviderInfo, ResponseFormat, StreamEvent,
+                    Usage)
 
 __all__ = [
     "AsyncChatClient",
@@ -32,6 +34,7 @@ __all__ = [
     "ProviderAdapter",
     "ProviderError",
     "ProviderInfo",
+    "ResponseFormat",
     "StreamEvent",
     "StreamParser",
     "Usage",

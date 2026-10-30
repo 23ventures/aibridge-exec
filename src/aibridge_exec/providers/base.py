@@ -34,9 +34,19 @@ class StreamParser(ABC):
     def finish(self) -> StreamEvent:
         """The final ``done`` event (usage, finish reason) once the stream ends."""
 
+    def flush_events(self) -> list[StreamEvent]:
+        """Events still buffered when the stream ends (before ``finish``)."""
+        return []
+
 
 class ProviderAdapter(ABC):
     info: ProviderInfo
+    #: False for servers that take no key (a local Ollama); a key is then sent only if given.
+    requires_key: bool = True
+    #: How streamed replies are framed: ``sse``, ``ndjson`` or ``auto`` (by Content-Type).
+    stream_format: str = "sse"
+    #: Only usable with a caller- or server-supplied URL (no public default endpoint).
+    needs_custom_base_url: bool = False
 
     @property
     def id(self) -> str:

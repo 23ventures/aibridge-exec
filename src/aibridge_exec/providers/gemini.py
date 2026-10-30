@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import quote
 
 from .base import HttpCall, ProviderAdapter, StreamParser, stream_error
-from .types import (ChatRequest, ChatResponse, FinishReason, ModelInfo, ProviderInfo, StreamEvent, Usage,
+from .types import (ChatMessage, ChatRequest, ChatResponse, FinishReason, ModelInfo, ProviderInfo, StreamEvent, Usage,
                     merge_consecutive)
 
 _FINISH: dict[str, FinishReason] = {
@@ -38,7 +38,7 @@ class GeminiAdapter(ProviderAdapter):
         body: dict[str, Any] = {
             "contents": [
                 {"role": "model" if m.role == "assistant" else "user", "parts": [{"text": m.content}]}
-                for m in merge_consecutive(turns)
+                for m in _leading_user(merge_consecutive(turns))
             ]
         }
         if system:
@@ -48,6 +48,10 @@ class GeminiAdapter(ProviderAdapter):
             config["temperature"] = request.temperature
         if request.max_tokens is not None:
             config["maxOutputTokens"] = request.max_tokens
+        if request.response_format is not None:
+            config["responseMimeType"] = "application/json"
+            if request.response_format.schema:
+                config["responseSchema"] = to_gemini_schema(request.response_format.json_schema())
         if config:
             body["generationConfig"] = config
         model = quote(request.model.removeprefix("models/"), safe="-._")
@@ -132,3 +136,44 @@ def _usage(payload: dict[str, Any]) -> Usage | None:
     if output is not None and meta.get("thoughtsTokenCount"):
         output += meta["thoughtsTokenCount"]
     return Usage(meta.get("promptTokenCount"), output)
+
+
+def _leading_user(turns: list[ChatMessage]) -> list[ChatMessage]:
+    """Gemini conversations must open with a user turn."""
+    if turns and turns[0].role == "assistant":
+        return [ChatMessage("user", "Continue."), *turns]
+    return turns
+
+
+_GEMINI_TYPES = {"object": "OBJECT", "array": "ARRAY", "string": "STRING", "boolean": "BOOLEAN",
+                 "number": "NUMBER", "integer": "INTEGER"}
+
+
+def to_gemini_schema(schema: Any) -> dict[str, Any]:
+    """JSON Schema to Gemini's ``responseSchema`` (an OpenAPI subset with upper-case types).
+
+    Keeps type, description, enum, required, nullable, properties and items; drops the rest.
+    """
+    if not isinstance(schema, dict):
+        return {"type": "STRING"}
+    kind = schema.get("type", "object")
+    nullable = False
+    if isinstance(kind, list):  # ["string", "null"]
+        nullable = "null" in kind
+        kind = next((k for k in kind if k != "null"), "string")
+    out: dict[str, Any] = {"type": _GEMINI_TYPES.get(str(kind).lower(), "STRING")}
+    if nullable or schema.get("nullable"):
+        out["nullable"] = True
+    if isinstance(schema.get("description"), str):
+        out["description"] = schema["description"]
+    if isinstance(schema.get("enum"), list):
+        out["enum"] = [str(v) for v in schema["enum"]]
+    if out["type"] == "OBJECT":
+        properties = schema.get("properties") or {}
+        out["properties"] = {key: to_gemini_schema(value) for key, value in properties.items()}
+        required = [key for key in schema.get("required") or [] if key in properties]
+        if required:
+            out["required"] = required
+    elif out["type"] == "ARRAY":
+        out["items"] = to_gemini_schema(schema.get("items") or {"type": "string"})
+    return out

@@ -95,8 +95,12 @@ def create_app(settings: ServerSettings | None = None, *, client: AsyncChatClien
     def enabled(provider_id: str) -> bool:
         if not settings.provider_enabled(provider_id):
             return False
-        return (provider_id != "openai_compatible" or settings.allow_custom_base_url
-                or provider_id in settings.base_urls)
+        try:
+            needs_url = get_provider(provider_id).needs_custom_base_url
+        except ProviderError:
+            return True  # unknown ids are reported by resolve()
+        # openai_compatible and ollama have no public endpoint: only with a URL to call.
+        return not needs_url or settings.allow_custom_base_url or provider_id in settings.base_urls
 
     def resolve(provider_id: str, base_url: str | None):
         if not enabled(provider_id):

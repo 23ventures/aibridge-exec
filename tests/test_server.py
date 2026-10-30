@@ -149,3 +149,15 @@ def test_cli_lists_providers(argv, capsys):
 
     assert main(argv) == 0
     assert "anthropic" in capsys.readouterr().out
+
+
+def test_url_only_providers_are_listed_only_with_a_url():
+    with make(Recorder()) as http:
+        ids = [p["id"] for p in http.get("/v1/providers", headers=AUTH).json()["providers"]]
+    assert {"kimi", "cohere", "alibaba", "meta", "nvidia"} <= set(ids)
+    assert "ollama" not in ids and "openai_compatible" not in ids
+    with make(Recorder(), base_urls={"ollama": "http://gpu:11434"}) as http:
+        ids = [p["id"] for p in http.get("/v1/providers", headers=AUTH).json()["providers"]]
+        assert "ollama" in ids and "openai_compatible" not in ids
+        response = http.post("/v1/models", json={"provider": "openai_compatible"}, headers=AUTH)
+        assert response.status_code == 404

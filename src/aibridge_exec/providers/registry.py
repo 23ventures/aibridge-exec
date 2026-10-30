@@ -3,9 +3,13 @@ from __future__ import annotations
 
 from .anthropic import AnthropicAdapter
 from .base import ProviderAdapter
+from .cohere import CohereAdapter
+from .dashscope import DashScopeAdapter
 from .errors import ProviderError
 from .gemini import GeminiAdapter
+from .ollama import OllamaAdapter
 from .openai_compat import builtin_openai_compatible, custom_openai_compatible
+from .responses import meta
 
 _PROVIDERS: dict[str, ProviderAdapter] = {}
 
@@ -27,5 +31,6 @@ def list_providers() -> list[ProviderAdapter]:
     return list(_PROVIDERS.values())
 
 
-for _adapter in [*builtin_openai_compatible(), AnthropicAdapter(), GeminiAdapter(), custom_openai_compatible()]:
+for _adapter in [*builtin_openai_compatible(), AnthropicAdapter(), GeminiAdapter(), CohereAdapter(),
+                 DashScopeAdapter(), meta(), OllamaAdapter(), custom_openai_compatible()]:
     register_provider(_adapter)

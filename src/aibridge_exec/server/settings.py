@@ -49,4 +49,5 @@ class ServerSettings:
     def provider_enabled(self, provider_id: str) -> bool:
         if self.providers:
             return provider_id in self.providers
-        return provider_id != "openai_compatible" or self.allow_custom_base_url
+        return provider_id not in ("openai_compatible", "ollama") or self.allow_custom_base_url \
+            or provider_id in self.base_urls
