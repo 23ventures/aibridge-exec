@@ -13,8 +13,8 @@ import httpx
 from .base import HttpCall, ProviderAdapter
 from .errors import ProviderError, redact
 from .registry import get_provider
-from .sse import SSEDecoder
-from .types import ChatMessage, ChatRequest, ChatResponse, ModelInfo, StreamEvent
+from .sse import decoder_for
+from .types import ChatMessage, ChatRequest, ChatResponse, ModelInfo, ResponseFormat, StreamEvent
 
 DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
 MAX_MODEL_PAGES = 20
@@ -23,15 +23,23 @@ Messages = Iterable["ChatMessage | Mapping[str, Any]"]
 
 
 def _request(model: str, messages: Messages, system: str | None, temperature: float | None,
-             max_tokens: int | None) -> ChatRequest:
+             max_tokens: int | None, options: Mapping[str, Any] | None = None) -> ChatRequest:
     try:
-        return ChatRequest.build(model, messages, system=system, temperature=temperature, max_tokens=max_tokens)
+        return ChatRequest.build(model, messages, system=system, temperature=temperature, max_tokens=max_tokens,
+                                 **(options or {}))
     except (ValueError, TypeError, KeyError) as exc:
         raise ProviderError("bad_request", f"invalid request: {exc}") from None
 
 
+def _options(response_format: "ResponseFormat | Mapping[str, Any] | None", reasoning_effort: str | None,
+             thinking: bool | None) -> dict[str, Any]:
+    return {"response_format": response_format, "reasoning_effort": reasoning_effort, "thinking": thinking}
+
+
 def _require_key(adapter: ProviderAdapter, api_key: str | None) -> str:
     if not api_key or not api_key.strip():
+        if not adapter.requires_key:
+            return ""
         raise ProviderError("auth", "an API key is required", provider=adapter.id)
     return api_key.strip()
 
@@ -96,32 +104,40 @@ class ChatClient(_Base):
 
     def chat(self, provider: str, *, api_key: str, model: str, messages: Messages, system: str | None = None,
              temperature: float | None = None, max_tokens: int | None = None,
-             base_url: str | None = None) -> ChatResponse:
+             base_url: str | None = None, response_format: "ResponseFormat | Mapping[str, Any] | None" = None,
+             reasoning_effort: str | None = None,
+             thinking: bool | None = None) -> ChatResponse:
         adapter = get_provider(provider)
         key = _require_key(adapter, api_key)
-        request = _request(model, messages, system, temperature, max_tokens)
+        request = _request(model, messages, system, temperature, max_tokens,
+                           _options(response_format, reasoning_effort, thinking))
         call = adapter.chat_call(request, key, base_url=self._base_url(adapter, base_url), stream=False)
         return adapter.parse_chat(_json(adapter, self._send(adapter, call, key), key), request)
 
     def stream(self, provider: str, *, api_key: str, model: str, messages: Messages, system: str | None = None,
                temperature: float | None = None, max_tokens: int | None = None,
-               base_url: str | None = None) -> Iterator[StreamEvent]:
+               base_url: str | None = None, response_format: "ResponseFormat | Mapping[str, Any] | None" = None,
+             reasoning_effort: str | None = None,
+             thinking: bool | None = None) -> Iterator[StreamEvent]:
         adapter = get_provider(provider)
         key = _require_key(adapter, api_key)
-        request = _request(model, messages, system, temperature, max_tokens)
+        request = _request(model, messages, system, temperature, max_tokens,
+                           _options(response_format, reasoning_effort, thinking))
         call = adapter.chat_call(request, key, base_url=self._base_url(adapter, base_url), stream=True)
-        parser, decoder = adapter.stream_parser(request), SSEDecoder()
+        parser = adapter.stream_parser(request)
         try:
             with self._http.stream(call.method, call.url, headers=call.headers, params=call.params,
                                    json=call.json) as response:
                 if response.status_code >= 400:
                     raise adapter.error_from_response(response.status_code, response.read().decode(errors="replace"),
                                                       key)
+                decoder = decoder_for(adapter.stream_format, response.headers.get("content-type"))
                 for chunk in response.iter_text():
                     for event, data in decoder.feed(chunk):
                         yield from parser.feed(event, data)
                 for event, data in decoder.flush():
                     yield from parser.feed(event, data)
+                yield from parser.flush_events()
         except httpx.HTTPError as exc:
             raise _transport_error(adapter, exc, key) from None
         yield parser.finish()
@@ -171,27 +187,34 @@ class AsyncChatClient(_Base):
 
     async def chat(self, provider: str, *, api_key: str, model: str, messages: Messages, system: str | None = None,
                    temperature: float | None = None, max_tokens: int | None = None,
-                   base_url: str | None = None) -> ChatResponse:
+                   base_url: str | None = None, response_format: "ResponseFormat | Mapping[str, Any] | None" = None,
+             reasoning_effort: str | None = None,
+             thinking: bool | None = None) -> ChatResponse:
         adapter = get_provider(provider)
         key = _require_key(adapter, api_key)
-        request = _request(model, messages, system, temperature, max_tokens)
+        request = _request(model, messages, system, temperature, max_tokens,
+                           _options(response_format, reasoning_effort, thinking))
         call = adapter.chat_call(request, key, base_url=self._base_url(adapter, base_url), stream=False)
         return adapter.parse_chat(_json(adapter, await self._send(adapter, call, key), key), request)
 
     async def stream(self, provider: str, *, api_key: str, model: str, messages: Messages,
                      system: str | None = None, temperature: float | None = None, max_tokens: int | None = None,
-                     base_url: str | None = None) -> AsyncIterator[StreamEvent]:
+                     base_url: str | None = None, response_format: "ResponseFormat | Mapping[str, Any] | None" = None,
+             reasoning_effort: str | None = None,
+             thinking: bool | None = None) -> AsyncIterator[StreamEvent]:
         adapter = get_provider(provider)
         key = _require_key(adapter, api_key)
-        request = _request(model, messages, system, temperature, max_tokens)
+        request = _request(model, messages, system, temperature, max_tokens,
+                           _options(response_format, reasoning_effort, thinking))
         call = adapter.chat_call(request, key, base_url=self._base_url(adapter, base_url), stream=True)
-        parser, decoder = adapter.stream_parser(request), SSEDecoder()
+        parser = adapter.stream_parser(request)
         try:
             async with self._http.stream(call.method, call.url, headers=call.headers, params=call.params,
                                          json=call.json) as response:
                 if response.status_code >= 400:
                     body = (await response.aread()).decode(errors="replace")
                     raise adapter.error_from_response(response.status_code, body, key)
+                decoder = decoder_for(adapter.stream_format, response.headers.get("content-type"))
                 async for chunk in response.aiter_text():
                     for event, data in decoder.feed(chunk):
                         for item in parser.feed(event, data):
@@ -199,6 +222,8 @@ class AsyncChatClient(_Base):
                 for event, data in decoder.flush():
                     for item in parser.feed(event, data):
                         yield item
+                for item in parser.flush_events():
+                    yield item
         except httpx.HTTPError as exc:
             raise _transport_error(adapter, exc, key) from None
         yield parser.finish()

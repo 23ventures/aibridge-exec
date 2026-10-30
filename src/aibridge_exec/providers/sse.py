@@ -1,4 +1,7 @@
-"""Incremental Server-Sent Events decoder (text in, ``(event, data)`` pairs out)."""
+"""Incremental stream decoders: Server-Sent Events and newline-delimited JSON.
+
+Both turn text chunks into ``(event, data)`` pairs, so stream parsers handle either.
+"""
 from __future__ import annotations
 
 
@@ -58,3 +61,28 @@ def _find_newline(text: str) -> tuple[int, int] | None:
                 return index, 2 if text[index + 1] == "\n" else 1
             return None  # wait: may be the first half of \r\n
     return None
+
+
+class NDJSONDecoder:
+    """Newline-delimited JSON (Ollama's native API): each non-empty line is one event."""
+
+    def __init__(self) -> None:
+        self._buffer = ""
+
+    def feed(self, chunk: str) -> list[tuple[str | None, str]]:
+        self._buffer += chunk
+        *lines, self._buffer = self._buffer.split("\n")
+        return [(None, line.strip()) for line in lines if line.strip()]
+
+    def flush(self) -> list[tuple[str | None, str]]:
+        tail, self._buffer = self._buffer.strip(), ""
+        return [(None, tail)] if tail else []
+
+
+def decoder_for(stream_format: str, content_type: str | None) -> "SSEDecoder | NDJSONDecoder":
+    """``sse`` / ``ndjson``, or ``auto``: NDJSON unless the response says text/event-stream."""
+    if stream_format == "ndjson":
+        return NDJSONDecoder()
+    if stream_format == "auto" and "event-stream" not in (content_type or "").lower():
+        return NDJSONDecoder()
+    return SSEDecoder()

@@ -16,18 +16,31 @@ modules never depend on the web server stack.
 
 ## Supported providers
 
-| Provider id | Provider | Notes |
+Every provider is a native adapter for that provider's own API, with its own id, endpoint and
+model rules.
+
+| Provider id | Provider | API |
 | --- | --- | --- |
-| `openai` | OpenAI | Chat Completions API |
-| `anthropic` | Anthropic | Messages API |
+| `openai` | OpenAI | Chat Completions |
+| `anthropic` | Anthropic | Messages |
 | `gemini` | Google Gemini | Gemini API (AI Studio keys) |
-| `xai` | xAI (Grok) | OpenAI-compatible |
-| `openrouter` | OpenRouter | OpenAI-compatible, hundreds of models with one key |
-| `groq` | Groq | OpenAI-compatible |
-| `deepseek` | DeepSeek | OpenAI-compatible |
-| `mistral` | Mistral | OpenAI-compatible |
-| `together` | Together AI | OpenAI-compatible |
-| `openai_compatible` | Any OpenAI-compatible URL | vLLM, Ollama, LM Studio, gateways; you pass `base_url` |
+| `cohere` | Cohere | v2 Chat |
+| `alibaba` | Alibaba Cloud (Qwen) | DashScope native (`/services/aigc/text-generation/generation`) |
+| `meta` | Meta (Muse) | Meta Model API, Responses (`/v1/responses`) |
+| `ollama` | Ollama | Native `/api/chat` (NDJSON streams); needs `base_url`, key optional |
+| `xai` | xAI (Grok) | Chat Completions protocol |
+| `deepseek` | DeepSeek | Chat Completions protocol |
+| `mistral` | Mistral | Chat Completions protocol |
+| `kimi` | Kimi (Moonshot) | Chat Completions protocol |
+| `nvidia` | NVIDIA NIM | Chat Completions protocol (`<think>` text removed) |
+| `zai` | Z.ai (GLM) | Chat Completions protocol |
+| `minimax` | MiniMax | Chat Completions protocol |
+| `arcee` | Arcee AI | Chat Completions protocol |
+| `ai21` | AI21 (Jamba) | Chat Completions protocol |
+| `openrouter` | OpenRouter | Chat Completions protocol, hundreds of models with one key |
+| `groq` | Groq | Chat Completions protocol |
+| `together` | Together AI | Chat Completions protocol |
+| `openai_compatible` | Any OpenAI-compatible URL | vLLM, LM Studio, gateways; you pass `base_url` |
 
 Model ids change often, so the package doesn't hard-code them. Call `list_models` with your key
 to get the ids your account can use right now.
@@ -82,6 +95,31 @@ Every provider takes the same arguments: `model`, `messages` (roles `system`, `u
 `assistant`), and optionally `system`, `temperature` (0 to 2) and `max_tokens`. Differences
 between providers are handled for you, for example Anthropic's separate system prompt and
 required `max_tokens`, or Gemini's `model` role name.
+
+### Structured output, caching, reasoning and thinking
+
+These options are provider-neutral; each adapter maps them to its provider's own mechanism and
+ignores what its provider lacks.
+
+```python
+from aibridge_exec.providers import ResponseFormat
+
+reply = client.chat("anthropic", api_key=key, model="<model id>", messages=messages,
+                    response_format=ResponseFormat(schema={"type": "object", "properties": {...}}))
+data = json.loads(reply.text)
+```
+
+| Option | What it does |
+| --- | --- |
+| `response_format=ResponseFormat(schema=...)` | JSON reply in `reply.text`: a forced tool (Anthropic, NVIDIA, Z.ai, MiniMax, Arcee, Meta), a tool the model may call (OpenAI, xAI, DeepSeek, Mistral), a JSON-schema response format (Kimi), JSON mode with a schema (Gemini, Cohere, Ollama) or without (AI21, Alibaba, Groq, Together) |
+| `{"role": ..., "content": ..., "cache": True}` | A cache breakpoint after this message (Anthropic; at most four per request) |
+| `reasoning_effort="lowest"` or a level | Reasoning models: `"lowest"` picks the cheapest setting the model accepts (OpenAI, Kimi, Meta) |
+| `thinking=True/False` | Hybrid models' thinking mode (Kimi, NVIDIA Nemotron, Z.ai, MiniMax, Alibaba, Cohere, Ollama) |
+
+Model rules handled for you include: OpenAI gpt-5/o-series take no temperature; Kimi `kimi-k*`
+take `max_completion_tokens` and no temperature; Claude Opus 4.6+ and Sonnet 4.5+ take no
+temperature. `usage.input_tokens` is always the whole prompt; `cache_read_tokens` and
+`cache_write_tokens` give the cached part when the provider reports it.
 
 ### Streaming
 
@@ -204,7 +242,7 @@ Interactive API docs are served at `/docs`.
 | `AIBRIDGE_EXEC_API_TOKENS` | empty | Comma-separated service tokens. Callers send `Authorization: Bearer <token>`. Empty means no authentication: only for local use. |
 | `AIBRIDGE_EXEC_PROVIDERS` | all | Comma-separated provider ids to expose |
 | `AIBRIDGE_EXEC_CORS_ORIGINS` | empty | Browser origins allowed to call the server directly |
-| `AIBRIDGE_EXEC_ALLOW_CUSTOM_BASE_URL` | `false` | Let callers send `base_url` (enables `openai_compatible`). Leave off on public servers: it lets callers make the server request any URL. |
+| `AIBRIDGE_EXEC_ALLOW_CUSTOM_BASE_URL` | `false` | Let callers send `base_url` (enables `openai_compatible` and `ollama`). Leave off on public servers: it lets callers make the server request any URL. |
 | `AIBRIDGE_EXEC_BASE_URL_<PROVIDER>` | provider default | Server-side URL override, for example `AIBRIDGE_EXEC_BASE_URL_OPENAI` |
 | `AIBRIDGE_EXEC_MAX_MESSAGES` | `500` | Messages per request |
 | `AIBRIDGE_EXEC_MAX_TOTAL_CHARS` | `1000000` | Characters per request |
